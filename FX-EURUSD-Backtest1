@@ -1,0 +1,61 @@
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+plt.style.use("ggplot")
+
+# === Load and clean 20-year EUR/USD data ===
+df = pd.read_csv("EUR_USD - Données Historiques.csv", encoding="utf-8")
+df = df.rename(columns={'Date': 'date', 'Dernier': 'close'})
+df['date'] = pd.to_datetime(df['date'], dayfirst=True)
+df['close'] = df['close'].astype(str).str.replace(',', '.').astype(float)
+df = df.sort_values('date').set_index('date')
+
+# === Daily pip movement ===
+returns = df['close'].pct_change()
+pip_moves = returns.abs() / 0.0001
+
+# === Rolling metrics ===
+rolling_avg = pip_moves.rolling(21).mean()
+rolling_std = pip_moves.rolling(21).std()
+weekly_std = pip_moves.rolling(5).std()
+z_score = (rolling_avg - rolling_avg.mean()) / rolling_avg.std()
+index = (1 + returns.fillna(0)).cumprod()
+
+# === Chart helper ===
+def plot_series(series, title, ylabel="Pips"):
+    plt.figure(figsize=(14, 5))
+    series.plot()
+    plt.title(title, fontsize=14)
+    plt.xlabel("Date")
+    plt.ylabel(ylabel)
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+# === Charts ===
+plot_series(df['close'], "EUR/USD Close Price", "Price")
+plot_series(pip_moves, "Daily Pip Movement", "Pips")
+plot_series(rolling_avg, "21-Day Avg Pip Volatility", "Pips")
+plot_series(rolling_std, "21-Day Std Dev of Pip Moves", "Pips")
+plot_series(weekly_std, "5-Day Weekly Std Dev of Pip Moves", "Pips")
+plot_series(z_score, "Z-Score of 21-Day Pip Volatility", "Z-Score")
+plot_series(index, "Simulated EUR/USD Backtest Index", "Index Value")
+
+# === Histogram ===
+plt.figure(figsize=(10, 4))
+pip_moves.dropna().hist(bins=100)
+plt.title("Histogram of Daily Pip Moves", fontsize=14)
+plt.xlabel("Pips")
+plt.ylabel("Frequency")
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+# === Stats ===
+print("---------- EUR/USD Volatility Summary ----------")
+print(f"Avg Daily Pip Move: {pip_moves.mean():.2f}")
+print(f"Max Daily Pip Move: {pip_moves.max():.2f}")
+print(f"21-Day Std Dev (Mean): {rolling_std.mean():.2f}")
+print(f"5-Day Weekly Std Dev (Mean): {weekly_std.mean():.2f}")

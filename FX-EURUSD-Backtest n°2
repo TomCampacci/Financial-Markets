@@ -1,0 +1,114 @@
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+plt.style.use("ggplot")
+
+# === Load and clean 20-year EUR/USD data ===
+df = pd.read_csv("EUR_USD - Données Historiques.csv", encoding="utf-8")
+df = df.rename(columns={'Date': 'date', 'Dernier': 'close'})
+df['date'] = pd.to_datetime(df['date'], dayfirst=True)
+df['close'] = df['close'].astype(str).str.replace(',', '.').astype(float)
+df = df.sort_values('date').set_index('date')
+
+# === Daily pip movement ===
+returns = df['close'].pct_change()
+pip_moves = returns.abs() / 0.0001
+
+# === Rolling metrics ===
+rolling_avg = pip_moves.rolling(21).mean()
+rolling_std = pip_moves.rolling(21).std()
+weekly_std = pip_moves.rolling(5).std()
+z_score = (rolling_avg - rolling_avg.mean()) / rolling_avg.std()
+index = (1 + returns.fillna(0)).cumprod()
+
+# === Chart helper ===
+def plot_series(series, title, ylabel="Pips"):
+    plt.figure(figsize=(14, 5))
+    series.plot()
+    plt.title(title, fontsize=14)
+    plt.xlabel("Date")
+    plt.ylabel(ylabel)
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+# === Charts ===
+plot_series(df['close'], "EUR/USD Close Price", "Price")
+plot_series(pip_moves, "Daily Pip Movement", "Pips")
+plot_series(rolling_avg, "21-Day Avg Pip Volatility", "Pips")
+plot_series(rolling_std, "21-Day Std Dev of Pip Moves", "Pips")
+plot_series(weekly_std, "5-Day Weekly Std Dev of Pip Moves", "Pips")
+plot_series(z_score, "Z-Score of 21-Day Pip Volatility", "Z-Score")
+plot_series(index, "Simulated EUR/USD Backtest Index", "Index Value")
+
+# === Histogram ===
+plt.figure(figsize=(10, 4))
+pip_moves.dropna().hist(bins=100)
+plt.title("Histogram of Daily Pip Moves", fontsize=14)
+plt.xlabel("Pips")
+plt.ylabel("Frequency")
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+# === Stats ===
+print("---------- EUR/USD Volatility Summary ----------")
+print(f"Avg Daily Pip Move: {pip_moves.mean():.2f}")
+print(f"Max Daily Pip Move: {pip_moves.max():.2f}")
+print(f"21-Day Std Dev (Mean): {rolling_std.mean():.2f}")
+print(f"5-Day Weekly Std Dev (Mean): {weekly_std.mean():.2f}")
+
+
+# === Mean Reversion Analysis ===
+window = 21
+mean_price = df['close'].rolling(window=window).mean()
+price_z = (df['close'] - mean_price) / df['close'].rolling(window=window).std()
+
+# Plot price with rolling mean
+plt.figure(figsize=(14, 5))
+df['close'].plot(label='EUR/USD Close', alpha=0.8)
+mean_price.plot(label=f'{window}-Day Rolling Mean', linestyle='--')
+plt.title("Mean Reversion: Price vs Rolling Mean")
+plt.ylabel("Price")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+# Plot Z-score of price
+plt.figure(figsize=(14, 5))
+price_z.plot()
+plt.axhline(0, color='black', linestyle='--')
+plt.axhline(1, color='red', linestyle='--', alpha=0.7)
+plt.axhline(-1, color='green', linestyle='--', alpha=0.7)
+plt.title("Z-Score of EUR/USD Relative to 21-Day Mean")
+plt.ylabel("Z-Score")
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+# Show signal points
+signals = pd.DataFrame(index=price_z.index)
+signals['price'] = df['close']
+signals['z_score'] = price_z
+signals['signal'] = 0
+signals.loc[price_z > 1, 'signal'] = -1  # Sell signal
+signals.loc[price_z < -1, 'signal'] = 1  # Buy signal
+
+# Plot signals on price chart
+plt.figure(figsize=(14, 5))
+df['close'].plot(label='Price')
+plt.plot(signals.loc[signals.signal == 1].index, 
+         signals.loc[signals.signal == 1]['price'], 
+         '^', markersize=10, color='g', label='Buy Signal')
+plt.plot(signals.loc[signals.signal == -1].index, 
+         signals.loc[signals.signal == -1]['price'], 
+         'v', markersize=10, color='r', label='Sell Signal')
+plt.title("Mean Reversion Strategy: Buy/Sell Signals")
+plt.ylabel("Price")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
